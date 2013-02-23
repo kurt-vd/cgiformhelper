@@ -162,7 +162,7 @@ int main(int argc, char *argv[])
 					if (!strcmp(tok, "name")) {
 						fpout = fopen(val, "w");
 						if (!fpout)
-							error(1, errno, "fopen %s");
+							error(1, errno, "fopen %s", val);
 						break;
 					}
 				}
