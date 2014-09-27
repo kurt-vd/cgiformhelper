@@ -110,6 +110,8 @@ int main(int argc, char *argv[])
 
 	/* test content-type */
 	conttype = getenv("CONTENT_TYPE");
+	if (!conttype)
+		exit(1);
 	ret = strstart(conttype, "multipart/form-data; boundary=");
 	if (!ret)
 		error(1, 0, "wrong content type: %s", conttype);
