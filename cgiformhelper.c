@@ -43,7 +43,7 @@ static inline int strstart(const char *haystack, const char *needle)
 {
 	int len = strlen(needle);
 
-	return strncmp(haystack, needle, len) ? 0 : len;
+	return strncmp(haystack ?: "", needle, len) ? 0 : len;
 }
 
 /* when str is a 'key=val' pair, put null terminator on key & return val */
