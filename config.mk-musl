@@ -1,0 +1,2 @@
+CC=musl-gcc
+LDFLAGS=-s

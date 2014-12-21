@@ -1,3 +1,9 @@
+# hide output
 cgiformhelper
+
 # hide MacOSX stuff
 *.dSYM
+
+# hide environment
+tags
+config.mk
