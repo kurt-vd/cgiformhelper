@@ -2,10 +2,11 @@
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <stdarg.h>
 
 #include <unistd.h>
 #include <getopt.h>
-#include <error.h>
+#include <syslog.h>
 #include <sys/stat.h>
 
 #define NAME	"cgiformhelper"
@@ -36,6 +37,17 @@ static const struct option long_opts[] = {
 static const char optstring[] = "+?V:";
 
 char buf[2*1024];
+
+static void esyslog(int priority, const char *fmt, ...)
+{
+	va_list va;
+
+	va_start(va, fmt);
+	vsyslog(priority, fmt, va);
+	va_end(va);
+	if (priority >= LOG_ERR)
+		exit(1);
+}
 
 /* compare haystack: if it begins with needle, return the equal size,
    otherwise 0 */
@@ -97,16 +109,18 @@ int main(int argc, char *argv[])
 		break;
 	}
 
+	openlog(NAME, LOG_PERROR, LOG_DAEMON);
+
 	tempdir = argv[optind];
 	if (!tempdir)
 		asprintf(&tempdir, "/tmp/cgi-%i", getppid());
 
 	if (mkdir(tempdir, 0777) < 0) {
 		if (errno != EEXIST)
-			error(1, errno, "mkdir %s", tempdir);
+			esyslog(LOG_ERR, "mkdir %s: %s\n", tempdir, strerror(errno));
 	}
 	if (chdir(tempdir) < 0)
-		error(1, errno, "chdir %s", tempdir);
+		esyslog(LOG_ERR,"chdir %s: %s\n", tempdir, strerror(errno));
 
 	/* test content-type */
 	conttype = getenv("CONTENT_TYPE");
@@ -114,7 +128,7 @@ int main(int argc, char *argv[])
 		exit(1);
 	ret = strstart(conttype, "multipart/form-data; boundary=");
 	if (!ret)
-		error(1, 0, "wrong content type: %s", conttype);
+		esyslog(LOG_ERR, "wrong content type: %s\n", conttype);
 	/* prepend -- before boundary */
 	asprintf(&boundary, "\r\n--%s\r\n", conttype + ret);
 	asprintf(&eboundary, "\r\n--%s--\r\n", conttype + ret);
@@ -129,7 +143,7 @@ int main(int argc, char *argv[])
 			if (feof(stdin) && !fill)
 				break;
 			if (ferror(stdin))
-				error(1, errno, "read stdin");
+				esyslog(LOG_ERR, "read stdin: %s\n", strerror(errno));
 		}
 		if (ret > 0)
 			fill += ret;
@@ -150,7 +164,7 @@ int main(int argc, char *argv[])
 			endp = strstr(buf, "\r\n");
 			if (!endp) {
 				if (fill == sizeof(buf))
-					error(1, 0, "buffer full with no line");
+					esyslog(LOG_ERR, "buffer full with no line\n", strerror(errno));
 				continue;
 			}
 			*endp = 0;
@@ -164,7 +178,7 @@ int main(int argc, char *argv[])
 					if (!strcmp(tok, "name")) {
 						fpout = fopen(val, "w");
 						if (!fpout)
-							error(1, errno, "fopen %s", val);
+							esyslog(LOG_ERR, "fopen %s: %s\n", val, strerror(errno));
 						break;
 					}
 				}
@@ -196,7 +210,7 @@ int main(int argc, char *argv[])
 				if (fpout) {
 					ret = fwrite(buf, 1, ret, fpout);
 					if (ret <= 0)
-						error(1, errno, "fwrite");
+						esyslog(LOG_ERR, "fwrite: %s\n", strerror(errno));
 				}
 				fill -= ret;
 				memmove(buf, buf + ret, fill);
