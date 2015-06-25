@@ -172,14 +172,27 @@ int main(int argc, char *argv[])
 			if (!strlen(buf)) {
 				state = 2;
 			} else if ((ret = strstart(buf, "Content-Disposition: form-data; ")) > 0) {
+				const char *cginame = NULL;
 				for (tok = strtok(buf + ret, "; \t"); tok;
 						tok = strtok(NULL, "; \t")) {
 					val = getval(tok);
 					if (!strcmp(tok, "name")) {
+						cginame = val;
 						fpout = fopen(val, "w");
 						if (!fpout)
 							esyslog(LOG_ERR, "fopen %s: %s\n", val, strerror(errno));
-						break;
+					} else if (cginame) {
+						/* save property */
+						FILE *fp;
+						char *propname;
+
+						asprintf(&propname, ".%s:%s", cginame, tok);
+						fp = fopen(propname, "w");
+						if (!fp)
+							esyslog(LOG_ERR, "fopen %s: %s\n", propname, strerror(errno));
+						fprintf(fp, "%s\n", val);
+						fclose(fp);
+						free(propname);
 					}
 				}
 			}
