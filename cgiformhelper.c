@@ -23,12 +23,19 @@ static const char help_msg[] =
 	"TEMPDIR does not need to exist.\n"
 	"When TEMPDIR is absent, /tmp/cgi-<parentpid> is used.\n"
 	"\n"
+	"Program Options: (mainly for debuggin)\n"
+	" -bBOUNDARY	Use BOUNDARY as mime boundary seperator instead\n"
+	"		The content type is not checked\n"
+	"		This allows for off-site debugging\n"
+	"\n"
 	;
 
 #ifdef _GNU_SOURCE
 static const struct option long_opts[] = {
 	{ "help", no_argument, NULL, '?', },
 	{ "version", no_argument, NULL, 'V', },
+
+	{ "boundary", required_argument, NULL, 'b', },
 	{ },
 };
 
@@ -37,7 +44,7 @@ static const struct option long_opts[] = {
 	getopt((argc), (argv), (optstring))
 #endif
 
-static const char optstring[] = "+?V:";
+static const char optstring[] = "+?V:b:";
 
 char buf[2*1024];
 
@@ -220,6 +227,7 @@ int main(int argc, char *argv[])
 	char *tempdir, *boundary, *eboundary, *endp, *tok;
 	int fill, boundarylen;
 	FILE *fpout;
+	const char *boundaryopt = NULL;
 
 	/* argument parsing */
 	while ((opt = getopt_long(argc, argv, optstring, long_opts, NULL)) != -1)
@@ -227,6 +235,9 @@ int main(int argc, char *argv[])
 	case 'V':
 		fprintf(stderr, "%s %s\n", NAME, VERSION);
 		return 0;
+	case 'b':
+		boundaryopt = optarg;
+		break;
 
 	default:
 		fprintf(stderr, "unknown option '%c'", opt);
@@ -249,16 +260,19 @@ int main(int argc, char *argv[])
 	if (chdir(tempdir) < 0)
 		esyslog(LOG_ERR,"chdir %s: %s\n", tempdir, strerror(errno));
 
-	/* test content-type */
-	conttype = getenv("CONTENT_TYPE");
-	if (!conttype)
-		exit(1);
-	ret = strstart(conttype, "multipart/form-data; boundary=");
-	if (!ret)
-		esyslog(LOG_ERR, "wrong content type: %s\n", conttype);
+	if (!boundaryopt) {
+		/* test content-type */
+		conttype = getenv("CONTENT_TYPE");
+		if (!conttype)
+			exit(1);
+		ret = strstart(conttype, "multipart/form-data; boundary=");
+		if (!ret)
+			esyslog(LOG_ERR, "wrong content type: %s\n", conttype);
+		boundaryopt = conttype + ret;
+	}
 	/* prepend -- before boundary */
-	asprintf(&boundary, "\r\n--%s\r\n", conttype + ret);
-	asprintf(&eboundary, "\r\n--%s--\r\n", conttype + ret);
+	asprintf(&boundary, "\r\n--%s\r\n", boundaryopt);
+	asprintf(&eboundary, "\r\n--%s--\r\n", boundaryopt);
 	boundarylen = strlen(boundary);
 
 	/* start parsing */
