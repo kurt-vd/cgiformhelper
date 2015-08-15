@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -38,6 +39,7 @@ static const char optstring[] = "+?V:";
 
 char buf[2*1024];
 
+__attribute__((format(printf,2,3)))
 static void esyslog(int priority, const char *fmt, ...)
 {
 	va_list va;
@@ -164,7 +166,7 @@ int main(int argc, char *argv[])
 			endp = strstr(buf, "\r\n");
 			if (!endp) {
 				if (fill == sizeof(buf))
-					esyslog(LOG_ERR, "buffer full with no line\n", strerror(errno));
+					esyslog(LOG_ERR, "buffer full with no line\n");
 				continue;
 			}
 			*endp = 0;
@@ -178,9 +180,9 @@ int main(int argc, char *argv[])
 					val = getval(tok);
 					if (!strcmp(tok, "name")) {
 						cginame = val;
-						fpout = fopen(val, "w");
+						fpout = fopen(cginame, "w");
 						if (!fpout)
-							esyslog(LOG_ERR, "fopen %s: %s\n", val, strerror(errno));
+							esyslog(LOG_ERR, "fopen %s: %s\n", cginame, strerror(errno));
 					} else if (cginame) {
 						/* save property */
 						FILE *fp;
