@@ -44,7 +44,7 @@ static const struct option long_opts[] = {
 	getopt((argc), (argv), (optstring))
 #endif
 
-static const char optstring[] = "+?V:b:";
+static const char optstring[] = "+?Vb:";
 
 char buf[2*1024];
 
