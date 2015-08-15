@@ -6,7 +6,9 @@
 #include <stdarg.h>
 
 #include <unistd.h>
+#include <fcntl.h>
 #include <getopt.h>
+#include <dirent.h>
 #include <syslog.h>
 #include <sys/stat.h>
 
@@ -86,6 +88,129 @@ static const char *memstr(const char *haystack, const char *needle, int len)
 			return haystack;
 	}
 	return NULL;
+}
+
+/* property access functions */
+__attribute__((format(printf,2,3)))
+static const char *propread(size_t sizehint, const char *fmt, ...)
+{
+	static char *buf;
+	static size_t bufsize;
+	int ret, fd;
+	va_list va;
+	char *filename;
+
+	va_start(va, fmt);
+	vasprintf(&filename, fmt, va);
+	va_end(va);
+
+	if (!sizehint) {
+		struct stat st;
+
+		if (stat(filename, &st))
+			esyslog(LOG_ERR, "stat %s: %s\n", filename, strerror(errno));
+		sizehint = st.st_size;
+	}
+	if (sizehint > bufsize) {
+		bufsize = (sizehint+1+127) & ~127;
+		buf = realloc(buf, bufsize);
+		if (!buf)
+			esyslog(LOG_ERR, "realloc: %s\n", strerror(errno));
+	}
+	fd = open(filename, O_RDONLY);
+	if (fd < 0)
+		esyslog(LOG_ERR, "open %s: %s\n", filename, strerror(errno));
+	ret = read(fd, buf, sizehint);
+	if (ret < 0)
+		esyslog(LOG_ERR, "read %s: %s\n", filename, strerror(errno));
+	buf[ret] = 0;
+	close(fd);
+	free(filename);
+	return buf;
+}
+
+__attribute__((format(printf,2,3)))
+static int propwrite(const char *str, const char *fmt, ...)
+{
+	int ret, fd;
+	va_list va;
+	char *filename;
+
+	va_start(va, fmt);
+	vasprintf(&filename, fmt, va);
+	va_end(va);
+
+	fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+	if (fd < 0)
+		esyslog(LOG_ERR, "open %s: %s\n", filename, strerror(errno));
+	ret = write(fd, str, strlen(str));
+	if (ret < 0)
+		esyslog(LOG_ERR, "read %s: %s\n", filename, strerror(errno));
+	close(fd);
+	free(filename);
+	return 0;
+}
+
+/* return the destination filename for a cgi parameter value
+ * This will fixup things when multiple values for the same
+ * parameter name exists
+ */
+static const char *cgimultiname(const char *name)
+{
+	struct stat st;
+	int nparams;
+	static char *filename;
+	char nbuf[32];
+
+	if (stat(name, &st) < 0) {
+		if (errno == ENOENT)
+			/* name is valid to use */
+			return name;
+		esyslog(LOG_ERR, "stat %s: %s\n", name, strerror(errno));
+		return NULL;
+	}
+	if (S_ISDIR(st.st_mode)) {
+		/* directory already exists */
+		nparams = strtoul(propread(st.st_size, "%s/.n", name), NULL, 0);
+	} else {
+		nparams = 1;
+		if (mkdir(".tmp", 0777) < 0)
+			esyslog(LOG_ERR, "mkdir .tmp: %s\n", strerror(errno));
+		if (rename(name, ".tmp/0") < 0)
+			esyslog(LOG_ERR, "mv %s .tmp/0: %s\n", name, strerror(errno));
+		if (rename(".tmp", name) < 0)
+			esyslog(LOG_ERR, "mv .tmp %s: %s\n", name, strerror(errno));
+		/* move metadata of parameters */
+		DIR *dir;
+		struct dirent *ent;
+		char *prefix, *newname;
+		int prefixlen;
+
+		/* prepare property prefix */
+		asprintf(&prefix, ".%s:", name);
+		prefixlen = strlen(prefix);
+
+		dir = opendir(".");
+		if (!dir)
+			esyslog(LOG_ERR, "opendir .");
+		for (ent = readdir(dir); ent; ent = readdir(dir)) {
+			if (!strncmp(ent->d_name, prefix, prefixlen)) {
+				asprintf(&newname, "%s/.0:%s", name, ent->d_name+prefixlen);
+				if (rename(ent->d_name, newname) < 0)
+					esyslog(LOG_ERR, "mv %s %s: %s\n", ent->d_name, newname, strerror(errno));
+				free(newname);
+			}
+		}
+		closedir(dir);
+		free(prefix);
+	}
+	if (filename)
+		free(filename);
+	asprintf(&filename, "%s/%u", name, nparams);
+	++nparams;
+	sprintf(nbuf, "%u\n", nparams);
+	propwrite(nbuf, "%s/.n", name);
+	return filename;
 }
 
 int main(int argc, char *argv[])
@@ -180,15 +305,25 @@ int main(int argc, char *argv[])
 					val = getval(tok);
 					if (!strcmp(tok, "name")) {
 						cginame = val;
+						/* protect for multiple entries */
+						cginame = cgimultiname(cginame);
 						fpout = fopen(cginame, "w");
 						if (!fpout)
 							esyslog(LOG_ERR, "fopen %s: %s\n", cginame, strerror(errno));
 					} else if (cginame) {
 						/* save property */
 						FILE *fp;
-						char *propname;
+						char *propname, *dir;
 
-						asprintf(&propname, ".%s:%s", cginame, tok);
+						dir = strrchr(cginame, '/');
+						if (!dir)
+							asprintf(&propname, ".%s:%s", cginame, tok);
+						else {
+							/* strip */
+							*dir = 0;
+							asprintf(&propname, "%s/.%s:%s", cginame, dir+1, tok);
+							*dir = '/';
+						}
 						fp = fopen(propname, "w");
 						if (!fp)
 							esyslog(LOG_ERR, "fopen %s: %s\n", propname, strerror(errno));
