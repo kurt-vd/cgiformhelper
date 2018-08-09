@@ -1,4 +1,6 @@
-default: cgiformhelper
+PROGS = cgiformhelper
+PROGS += urlencode
+default: $(PROGS)
 
 PREFIX	=/usr/local
 VERSION	:= $(shell ./getlocalversion .)
@@ -9,9 +11,9 @@ CFLAGS	= -Wall -g3 -O0
 
 CPPFLAGS+= -DVERSION=\"$(VERSION)\"
 
-install: cgiformhelper
+install: $(PROGS)
 	install $< $(DESTDIR)$(PREFIX)/bin
 
 clean:
-	rm -f cgiformhelper
+	rm -f $(PROGS)
 
