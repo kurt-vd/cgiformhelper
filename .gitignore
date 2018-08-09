@@ -1,6 +1,9 @@
 # hide output
 cgiformhelper
 urlencode
+jsontofiles
+
+*.o
 
 # hide MacOSX stuff
 *.dSYM
