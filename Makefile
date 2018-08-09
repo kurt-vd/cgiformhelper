@@ -12,7 +12,7 @@ CFLAGS	= -Wall -g3 -O0
 CPPFLAGS+= -DVERSION=\"$(VERSION)\"
 
 install: $(PROGS)
-	install $< $(DESTDIR)$(PREFIX)/bin
+	install $^ $(DESTDIR)$(PREFIX)/bin
 
 clean:
 	rm -f $(PROGS)
