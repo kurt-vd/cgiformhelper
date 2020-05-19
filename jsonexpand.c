@@ -21,6 +21,7 @@ static const char help_msg[] =
 	"\n"
 	"text/json is the expected content-type on stdin\n"
 	"Options:\n"
+	" -s, --shell	Prepare for direct eval in shell\n"
 	;
 
 #ifdef _GNU_SOURCE
@@ -28,6 +29,7 @@ static const struct option long_opts[] = {
 	{ "help", no_argument, NULL, '?', },
 	{ "version", no_argument, NULL, 'V', },
 
+	{ "shell", no_argument, NULL, 's', },
 	{ },
 };
 
@@ -36,7 +38,10 @@ static const struct option long_opts[] = {
 	getopt((argc), (argv), (optstring))
 #endif
 
-static const char optstring[] = "+?V";
+static const char optstring[] = "+?Vs";
+
+static int emit_regular(const char *topic, const char *dat, int start, int stop);
+static int (*emit)(const char *topic, const char *dat, int start, int stop) = emit_regular;
 
 /* generic error logging */
 #define mylog(loglevel, fmt, ...) \
@@ -48,6 +53,36 @@ static const char optstring[] = "+?V";
 
 #define ESTR(num)	strerror(num)
 
+static int shellvarname_escape(int c)
+{
+	return (c >= '0' && c <= '9')
+		|| (c >= 'a' && c <= 'z')
+		|| (c >= 'A' && c <= 'Z')
+		|| c == '_';
+}
+
+static int emit_shell(const char *topic, const char *dat, int start, int stop)
+{
+	int j;
+
+	for (j = 0; topic[j]; ++j) {
+		printf("%c", shellvarname_escape(topic[j]) ? topic[j] : '_');
+	}
+	printf("='");
+	/* TODO: escape content */
+	fwrite(dat + start, stop - start, 1, stdout);
+	printf("'\n");
+	return 0;
+}
+
+static int emit_regular(const char *topic, const char *dat, int start, int stop)
+{
+	printf("%s\t", topic);
+	fwrite(dat + start, stop - start, 1, stdout);
+	printf("\n");
+	return 0;
+}
+
 static int tokdump(char *str, jsmntok_t *t, const char *topic)
 {
 	int ntok, j;
@@ -57,9 +92,7 @@ static int tokdump(char *str, jsmntok_t *t, const char *topic)
 	switch (t->type) {
 	case JSMN_PRIMITIVE:
 	case JSMN_STRING:
-		printf("%s\t", topic);
-		fwrite(str+t->start, t->end - t->start, 1, stdout);
-		printf("\n");
+		emit(topic, str, t->start, t->end);
 		return 1;
 	case JSMN_OBJECT:
 		newtopic = NULL;
@@ -112,6 +145,10 @@ int main(int argc, char *argv[])
 	case '?':
 		fputs(help_msg, stderr);
 		exit(1);
+		break;
+
+	case 's':
+		emit = emit_shell;
 		break;
 	}
 
