@@ -1,4 +1,5 @@
 PROGS = cgiformhelper
+PROGS += jsonexpand
 PROGS += jsontofiles
 PROGS += urlencode
 default: $(PROGS)
@@ -13,6 +14,8 @@ CFLAGS	= -Wall -g3 -O0
 CPPFLAGS+= -DVERSION=\"$(VERSION)\"
 
 VPATH=jsmn
+jsonexpand: CPPFLAGS+=-Ijsmn -DJSMN_PARENT_LINKS=1
+jsonexpand: jsmn.o
 jsontofiles: CPPFLAGS+=-Ijsmn -DJSMN_PARENT_LINKS=1
 jsontofiles: jsmn.o
 
