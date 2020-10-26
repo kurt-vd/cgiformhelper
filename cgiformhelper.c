@@ -27,6 +27,7 @@ static const char help_msg[] =
 	" -bBOUNDARY	Use BOUNDARY as mime boundary seperator instead\n"
 	"		The content type is not checked\n"
 	"		This allows for off-site debugging\n"
+	" -sFILE	write parameter names in sequence to FILE\n"
 	"\n"
 	;
 
@@ -36,6 +37,7 @@ static const struct option long_opts[] = {
 	{ "version", no_argument, NULL, 'V', },
 
 	{ "boundary", required_argument, NULL, 'b', },
+	{ "sequence", required_argument, NULL, 's', },
 	{ },
 };
 
@@ -44,7 +46,7 @@ static const struct option long_opts[] = {
 	getopt((argc), (argv), (optstring))
 #endif
 
-static const char optstring[] = "+?Vb:";
+static const char optstring[] = "+?Vb:s:";
 
 char buf[2*1024];
 
@@ -228,6 +230,8 @@ int main(int argc, char *argv[])
 	int fill, boundarylen;
 	FILE *fpout;
 	const char *boundaryopt = NULL;
+	const char *sequencefile = NULL;
+	FILE *seqfp = NULL;
 
 	/* argument parsing */
 	while ((opt = getopt_long(argc, argv, optstring, long_opts, NULL)) != -1)
@@ -237,6 +241,9 @@ int main(int argc, char *argv[])
 		return 0;
 	case 'b':
 		boundaryopt = optarg;
+		break;
+	case 's':
+		sequencefile = optarg;
 		break;
 
 	default:
@@ -259,6 +266,12 @@ int main(int argc, char *argv[])
 	}
 	if (chdir(tempdir) < 0)
 		esyslog(LOG_ERR,"chdir %s: %s\n", tempdir, strerror(errno));
+
+	if (sequencefile) {
+		seqfp = fopen(sequencefile, "w");
+		if (!seqfp)
+			esyslog(LOG_ERR, "fopen %s w: %s\n", sequencefile, strerror(errno));
+	}
 
 	if (!boundaryopt) {
 		/* test content-type */
@@ -319,6 +332,8 @@ int main(int argc, char *argv[])
 					val = getval(tok);
 					if (!strcmp(tok, "name")) {
 						cginame = val;
+						if (seqfp)
+							fprintf(seqfp, "%s\n", cginame);
 						/* protect for multiple entries */
 						cginame = cgimultiname(cginame);
 						fpout = fopen(cginame, "w");
@@ -381,5 +396,6 @@ int main(int argc, char *argv[])
 			}
 		}
 	}
+	fclose(seqfp);
 	return 0;
 }
