@@ -13,7 +13,7 @@ int main(int argc, char *argv[])
 			if (strchr(unreserved, *str))
 				fputc(*str, stdout);
 			else
-				printf("%%%02x", *str);
+				printf("%%%02x", *str & 0xff);
 		}
 		printf("\n");
 	}
